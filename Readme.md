@@ -20,7 +20,7 @@ A simple yet elegant **YouTube Video Downloader** built using `PyQt5` and `yt-dl
 
 1. Clone this repository:
     ```bash
-    git clone https://github.com/your-username/yt-video-downloader.git
+    git clone https://github.com/Sarwarhridoy4/YouTubeDL
     cd yt-video-downloader
     ```
 
