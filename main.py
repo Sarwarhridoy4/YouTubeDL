@@ -4,12 +4,13 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QProgressBar, QComboBox, QLineEdit, QMessageBox
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from yt_dlp import YoutubeDL, DownloadError
+from yt_dlp import YoutubeDL
 
 
 class DownloadThread(QThread):
     progress = pyqtSignal(int)
-    completed = pyqtSignal(bool)  # Emits True for success, False for failure
+    completed = pyqtSignal()
+    error = pyqtSignal(str)
 
     def __init__(self, url, format, destination):
         super().__init__()
@@ -21,15 +22,18 @@ class DownloadThread(QThread):
         ydl_opts = {
             'format': self.format,
             'outtmpl': os.path.join(self.destination, '%(title)s.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',  # Convert to mp4 after downloading
+            }],
             'progress_hooks': [self.progress_hook]
         }
 
         try:
             with YoutubeDL(ydl_opts) as ydl:
                 ydl.download([self.url])
-            self.completed.emit(True)  # Success
-        except DownloadError:
-            self.completed.emit(False)  # Error
+        except Exception as e:
+            self.error.emit(str(e))
 
     def progress_hook(self, d):
         if d['status'] == 'downloading':
@@ -37,7 +41,7 @@ class DownloadThread(QThread):
             self.progress.emit(int(progress_percent))
 
         if d['status'] == 'finished':
-            self.completed.emit(True)
+            self.completed.emit()
 
 
 class DownloaderApp(QWidget):
@@ -47,8 +51,8 @@ class DownloaderApp(QWidget):
 
     def init_ui(self):
         # Basic window setup
-        self.setWindowTitle('YouTube Video Downloader')
-        self.setGeometry(200, 200, 500, 250)
+        self.setWindowTitle('YouTube Video Downloader (MP4)')
+        self.setGeometry(200, 200, 500, 300)
 
         layout = QVBoxLayout()
 
@@ -96,7 +100,7 @@ class DownloaderApp(QWidget):
             QWidget {
                 background-color: #2C3E50;
                 color: white;
-                font-family: Roboto, Arial, sans-serif;
+                font-family: Arial, sans-serif;
             }
             QLabel {
                 font-size: 14px;
@@ -144,12 +148,12 @@ class DownloaderApp(QWidget):
 
     def start_download(self):
         if not self.destination_folder:
-            self.destination_label.setText('Please select a folder!')
+            QMessageBox.warning(self, 'Error', 'Please select a folder!')
             return
 
         url = self.url_input.text()
         if not url:
-            self.url_label.setText('Please enter a video URL!')
+            QMessageBox.warning(self, 'Error', 'Please enter a video URL!')
             return
 
         height = self.height_combo.currentText()
@@ -158,23 +162,19 @@ class DownloaderApp(QWidget):
         self.thread = DownloadThread(url, format_option, self.destination_folder)
         self.thread.progress.connect(self.update_progress)
         self.thread.completed.connect(self.download_completed)
+        self.thread.error.connect(self.download_error)
         self.thread.start()
 
     def update_progress(self, percent):
         self.progress_bar.setValue(percent)
 
-    def download_completed(self, success):
-        if success:
-            self.show_message_box('Download Complete', 'The video has been downloaded successfully!')
-        else:
-            self.show_message_box('Download Error', 'An error occurred during the download process.')
+    def download_completed(self):
+        QMessageBox.information(self, 'Success', 'Download Completed!')
+        self.download_button.setText('Download Completed')
 
-    def show_message_box(self, title, message):
-        msg_box = QMessageBox()
-        msg_box.setWindowTitle(title)
-        msg_box.setText(message)
-        msg_box.setIcon(QMessageBox.Information if title == 'Download Complete' else QMessageBox.Critical)
-        msg_box.exec_()
+    def download_error(self, error_message):
+        QMessageBox.critical(self, 'Error', f'Download Failed: {error_message}')
+        self.download_button.setText('Download')
 
 
 if __name__ == '__main__':
